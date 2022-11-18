@@ -100,13 +100,19 @@ class PhoneBot(commands.Bot):
             command_prefix=commands.when_mentioned, help_command=None, intents=intents
         )
         self.cdev = ciberedev.Client()
-        self.modules = []
+        self.modules = ["cogs.config", "cogs.main_cmds", "devcmd"]
         self.loggers = loggers()
 
     async def setup_hook(self) -> None:
         async with asqlite.connect("data.db") as con:
             async with con.cursor() as cur:
-                await cur.execute("CREATE TABLE IF NOT EXISTS config (id INT, )")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS config (id INT, backgroundImage BYTES)"
+                )
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS texts (id INT, reciever INT, sender INT, content TEXT)"
+                )
+                await con.commit()
 
         for module in self.modules:
             try:
