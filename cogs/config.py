@@ -27,7 +27,6 @@ class ConfigCog(commands.Cog):
         self,
         inter: discord.Interaction,
         new_image: discord.Attachment,
-        theme: Literal["light", "dark"],
     ):
         return
         if not "image" in str(new_image.content_type):
