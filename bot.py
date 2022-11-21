@@ -7,7 +7,7 @@ import ciberedev
 import discord
 from aiohttp import ClientSession
 from discord.ext import commands
-
+from functools import partial
 
 class colorFormatters:
     class discord(logging.Formatter):
@@ -96,12 +96,14 @@ class PhoneBot(commands.Bot):
         intents = discord.Intents.default()
         intents.presences = True
         intents.members = True
-        super().__init__(
-            command_prefix=commands.when_mentioned, help_command=None, intents=intents
-        )
+        super().__init__(command_prefix=commands.when_mentioned, intents=intents)
         self.cdev = ciberedev.Client()
         self.modules = ["cogs.config", "cogs.open_cmd", "devcmd"]
         self.loggers = loggers()
+
+    async def execute(self, func, *args):
+        func = partial(func, *args)
+        return await self.loop.run_in_executor(None, func)
 
     async def setup_hook(self) -> None:
         async with asqlite.connect("data.db") as con:

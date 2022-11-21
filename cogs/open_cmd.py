@@ -59,9 +59,9 @@ Apps = [
 ]
 
 
-def _pil_stuff(
+def pil_generate_ui(
     _bytes, timezone: timezone, theme: Literal["light", "dark"]
-) -> discord.File:
+) -> BytesIO:
     image = Image.open(BytesIO(_bytes))
     image = image.resize((750, 1334))
 
@@ -92,31 +92,70 @@ def _pil_stuff(
     output_buffer = BytesIO()
     image.save(output_buffer, "png")
     output_buffer.seek(0)
-    file = discord.File(fp=output_buffer, filename="my_file.png")
-    return file
+    return output_buffer
+
+
+def pil_add_selection_cursor(background, app) -> BytesIO:
+    image = Image.open(BytesIO(background.getbuffer().tobytes()))
+    app_cords = AppCords[app]
+
+    imd = ImageDraw.Draw(image)
+    imd.rectangle(
+        (app_cords[0] + 145, app_cords[1], app_cords[0], app_cords[1] + 145),
+        outline='red',
+        width=5
+    )
+    
+    output_buffer = BytesIO()
+    image.save(output_buffer, "png")
+    output_buffer.seek(0)
+    return output_buffer
 
 
 class MainView(ui.View):
-    def __init__(self, author: discord.Member):
+    def __init__(self, author: discord.Member, image):
         super().__init__()
         self.user = author
+        self.image = image
         self.app_index = 1
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message("no", ephemeral=True)
+            return False
+        else:
+            return True
 
     @ui.button(label=" ")
     async def blank1(self, inter: discord.Interaction, button: ui.Button):
-        await inter.response.defer()
+        await inter.response.send_message(self.app_index)
 
     @ui.button(label="/\\", custom_id="main-view:up")
     async def back(self, inter: discord.Interaction, button: ui.Button):
-        pass
+        if self.app_index < 5:
+            return await inter.response.send_message("You can't go up any more", ephemeral=True)
+        
+        self.app_index -= 4
+        img = await inter.client.execute(pil_add_selection_cursor, self.image, self.app_index) # type: ignore
+
+        file = discord.File(fp=img, filename="my_file.png")
+        await inter.response.edit_message(attachments=[file])
 
     @ui.button(label=" ")
     async def blank2(self, inter: discord.Interaction, button: ui.Button):
-        await inter.response.defer()
+        await inter.response.send_message(AppCords[self.app_index])
 
     @ui.button(label="<", custom_id="main-view:left", row=2)
     async def left(self, inter: discord.Interaction, button: ui.Button):
-        await inter.response.defer()
+        if self.app_index == 0:
+            return await inter.response.send_message("You can't go left any more", ephemeral=True)
+        
+        
+        self.app_index -= 1
+        img = await inter.client.execute(pil_add_selection_cursor, self.image, self.app_index) # type: ignore
+
+        file = discord.File(fp=img, filename="my_file.png")
+        await inter.response.edit_message(attachments=[file])
 
     @ui.button(emoji="🖱️", row=2)
     async def cursor(self, inter: discord.Interaction, button: ui.Button):
@@ -124,7 +163,14 @@ class MainView(ui.View):
 
     @ui.button(label=">", custom_id="main-view:right", row=2)
     async def right(self, inter: discord.Interaction, button: ui.Button):
-        await inter.response.defer()
+        if self.app_index == 20:
+            return await inter.response.send_message("You can't go right any more", ephemeral=True)
+        
+        self.app_index += 1
+        img = await inter.client.execute(pil_add_selection_cursor, self.image, self.app_index) # type: ignore
+
+        file = discord.File(fp=img, filename="my_file.png")
+        await inter.response.edit_message(attachments=[file])
 
     @ui.button(label=" ", row=3)
     async def blank5(self, inter: discord.Interaction, button: ui.Button):
@@ -132,7 +178,14 @@ class MainView(ui.View):
 
     @ui.button(label="\\/", custom_id="main-view:down", row=3)
     async def down(self, inter: discord.Interaction, button: ui.Button):
-        pass
+        if self.app_index > 15:
+            return await inter.response.send_message("You can't go down any more", ephemeral=True)
+        
+        self.app_index += 4
+        img = await inter.client.execute(pil_add_selection_cursor, self.image, self.app_index) # type: ignore
+
+        file = discord.File(fp=img, filename="my_file.png")
+        await inter.response.edit_message(attachments=[file])
 
     @ui.button(label=" ", row=3)
     async def blank6(self, inter: discord.Interaction, button: ui.Button):
@@ -153,9 +206,10 @@ class MainCmds(commands.Cog):
         )
         _bytes = await _bytes.read()
         tz = timezone(timedelta(hours=-8.0))
-        func = partial(_pil_stuff, _bytes, tz, theme)
-        img = await self.bot.loop.run_in_executor(None, func)
-        await inter.response.send_message(file=img, view=MainView(inter.user))  # type: ignore
+        orig_img = await self.bot.execute(pil_generate_ui, _bytes, tz, theme)
+        img = await self.bot.execute(pil_add_selection_cursor, orig_img, 1)
+        file = discord.File(fp=img, filename="my_file.png")
+        await inter.response.send_message(file=file, view=MainView(inter.user, orig_img))  # type: ignore
 
 
 async def setup(bot):
